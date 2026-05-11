@@ -266,6 +266,7 @@ def check_benchmark_data(base_date=INDEX_HISTORY_START_DATE, end_date=None, inde
 def build_dashboard_data_from_excel(excel_path):
     """把最新 Excel 转成网页直接消费的 data.json 结构。"""
     file_generated_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(excel_path)))
+    site_refreshed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     xls = pd.ExcelFile(excel_path)
     required_sheets = ["持仓数据", "已清仓", "交易记录"]
 
@@ -307,6 +308,7 @@ def build_dashboard_data_from_excel(excel_path):
             "asOfDate": as_of_date,
             "sourceFile": os.path.basename(excel_path),
             "generatedAt": file_generated_at,
+            "siteRefreshedAt": site_refreshed_at,
             "navBaseDate": nav_history["baseDate"],
             "benchmarkName": DEFAULT_BENCHMARK_NAME,
             "benchmarkError": "; ".join(benchmark_errors.values()) if benchmark_errors else None,

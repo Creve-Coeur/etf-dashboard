@@ -493,7 +493,8 @@
         const { meta, overview, navSeries, sheets, strategy } = dashboardData;
         document.getElementById("portfolioTitle").textContent = meta.portfolioName;
         const displayTime = meta.generatedAt || meta.asOfDate || "--";
-        document.getElementById("metaInfo").textContent = `数据时间：${displayTime} ｜ 数据源：${meta.sourceFile}`;
+        const siteRefreshedAt = meta.siteRefreshedAt || "--";
+        document.getElementById("metaInfo").textContent = `账本时间：${displayTime} ｜ 网站刷新：${siteRefreshedAt} ｜ 数据源：${meta.sourceFile}`;
         const benchmarkMap = getBenchmarkMap();
         const defaultBenchmark = benchmarkMap[meta.benchmarkName] ? meta.benchmarkName : Object.keys(benchmarkMap)[0];
         renderBenchmarkSelector(defaultBenchmark);
