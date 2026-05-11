@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ETF 实盘持仓账本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: radial-gradient(circle at top, #182130 0%, #0c1320 42%, #090f18 100%);
+      }
+      .card {
+        background: linear-gradient(165deg, rgba(29, 41, 60, 0.88), rgba(15, 23, 38, 0.9));
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        box-shadow: 0 16px 40px rgba(2, 6, 23, 0.28);
+      }
+      .table-row:hover {
+        background: rgba(51, 65, 85, 0.22);
+      }
+      .metric-label {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+      .metric-value {
+        color: #f8fafc;
+        font-size: 1.35rem;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-slate-100 antialiased">
+    <main id="app">
+      <header class="sticky top-0 z-20 border-b border-slate-700/40 bg-slate-950/45 backdrop-blur">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
+          <div>
+            <h1 id="portfolioTitle" class="text-xl font-semibold">ETF 实盘持仓账本</h1>
+            <p id="metaInfo" class="mt-1 text-xs text-slate-400">数据日期：--</p>
+          </div>
+          <div id="dataStatus" class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400">
+            正在读取数据...
+          </div>
+        </div>
+      </header>
+
+      <section class="mx-auto max-w-7xl space-y-6 p-4">
+        <div id="overviewCards" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6"></div>
+
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div class="card rounded-xl p-4 xl:col-span-2">
+            <div class="mb-3 flex items-center justify-between">
+              <h2 class="text-sm font-medium text-slate-300">组合净值累计曲线</h2>
+              <span class="text-xs text-slate-500">独立维护于 `data.json`</span>
+            </div>
+            <div id="navChart" class="h-80"></div>
+          </div>
+          <div class="card rounded-xl p-4">
+            <h2 class="mb-3 text-sm font-medium text-slate-300">当前仓位结构</h2>
+            <div id="allocationChart" class="h-80"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div class="card rounded-xl p-4 xl:col-span-2">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-medium text-slate-300">当前持仓明细</h2>
+                <p class="mt-1 text-xs text-slate-500">字段结构对齐 `持仓数据` 工作表</p>
+              </div>
+              <div id="holdingsHint" class="text-xs text-slate-500"></div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[1200px] text-sm">
+                <thead class="border-b border-slate-700/60 text-slate-400">
+                  <tr>
+                    <th class="py-2 pr-4 text-left">代码</th>
+                    <th class="py-2 pr-4 text-left">名称</th>
+                    <th class="py-2 pr-4 text-right">持有金额</th>
+                    <th class="py-2 pr-4 text-right">当日盈亏</th>
+                    <th class="py-2 pr-4 text-right">持有盈亏</th>
+                    <th class="py-2 pr-4 text-right">累计盈亏</th>
+                    <th class="py-2 pr-4 text-right">仓位占比</th>
+                    <th class="py-2 pr-4 text-right">持有数量</th>
+                    <th class="py-2 pr-4 text-right">持仓天数</th>
+                    <th class="py-2 pr-4 text-right">最新价</th>
+                    <th class="py-2 pr-4 text-right">单位成本</th>
+                    <th class="py-2 pr-4 text-right">回本涨幅</th>
+                    <th class="py-2 pr-4 text-right">近1月</th>
+                    <th class="py-2 pr-4 text-right">近3月</th>
+                    <th class="py-2 text-right">近1年</th>
+                  </tr>
+                </thead>
+                <tbody id="holdingsTableBody" class="text-slate-200"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="card rounded-xl p-4">
+              <h2 class="mb-3 text-sm font-medium text-slate-300">汇总快照</h2>
+              <div id="summaryPanel" class="space-y-3 text-sm text-slate-300"></div>
+            </div>
+            <div class="card rounded-xl p-4">
+              <h2 class="mb-3 text-sm font-medium text-slate-300">策略说明</h2>
+              <div id="strategyInfo" class="space-y-3 text-sm text-slate-300"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card rounded-xl p-4">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-medium text-slate-300">已清仓记录</h2>
+              <p class="mt-1 text-xs text-slate-500">字段结构对齐 `已清仓` 工作表</p>
+            </div>
+            <div id="closedHint" class="text-xs text-slate-500"></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[1100px] text-sm">
+              <thead class="border-b border-slate-700/60 text-slate-400">
+                <tr>
+                  <th class="py-2 pr-4 text-left">清仓日期</th>
+                  <th class="py-2 pr-4 text-left">代码</th>
+                  <th class="py-2 pr-4 text-left">名称</th>
+                  <th class="py-2 pr-4 text-right">总盈亏</th>
+                  <th class="py-2 pr-4 text-right">盈亏比</th>
+                  <th class="py-2 pr-4 text-right">同期大盘</th>
+                  <th class="py-2 pr-4 text-right">跑赢大盘</th>
+                  <th class="py-2 pr-4 text-right">买入均价</th>
+                  <th class="py-2 pr-4 text-right">卖出均价</th>
+                  <th class="py-2 pr-4 text-right">持仓天数</th>
+                  <th class="py-2 pr-4 text-right">交易费用</th>
+                  <th class="py-2 text-right">建仓日期</th>
+                </tr>
+              </thead>
+              <tbody id="closedTableBody" class="text-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card rounded-xl p-4">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-medium text-slate-300">最新交易记录</h2>
+              <p class="mt-1 text-xs text-slate-500">字段结构对齐 `交易记录` 工作表</p>
+            </div>
+            <div id="tradeHint" class="text-xs text-slate-500"></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[1100px] text-sm">
+              <thead class="border-b border-slate-700/60 text-slate-400">
+                <tr>
+                  <th class="py-2 pr-4 text-left">成交日期</th>
+                  <th class="py-2 pr-4 text-left">成交时间</th>
+                  <th class="py-2 pr-4 text-left">代码</th>
+                  <th class="py-2 pr-4 text-left">名称</th>
+                  <th class="py-2 pr-4 text-left">交易类别</th>
+                  <th class="py-2 pr-4 text-right">成交数量</th>
+                  <th class="py-2 pr-4 text-right">成交价格</th>
+                  <th class="py-2 pr-4 text-right">发生金额</th>
+                  <th class="py-2 pr-4 text-right">成交金额</th>
+                  <th class="py-2 pr-4 text-right">费用</th>
+                  <th class="py-2 text-left">备注</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTableBody" class="text-slate-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      let dashboardData = null;
+      let navChart = null;
+      let allocationChart = null;
+      const app = document.getElementById("app");
+      const dataStatus = document.getElementById("dataStatus");
+
+      function toNumber(value) {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function isNil(value) {
+        return value === null || value === undefined || value === "";
+      }
+
+      function formatCurrency(value) {
+        if (isNil(value)) return "--";
+        return new Intl.NumberFormat("zh-CN", {
+          style: "currency",
+          currency: "CNY",
+          maximumFractionDigits: 2
+        }).format(toNumber(value));
+      }
+
+      function formatNumber(value, digits = 2) {
+        if (isNil(value)) return "--";
+        return Number(value).toFixed(digits);
+      }
+
+      function formatPercent(value, digits = 2, scale = 100) {
+        if (isNil(value)) return "--";
+        return `${(Number(value) * scale).toFixed(digits)}%`;
+      }
+
+      function pnlClass(value) {
+        return toNumber(value) >= 0 ? "text-rose-400" : "text-emerald-400";
+      }
+
+      function codeText(value) {
+        if (isNil(value)) return "--";
+        return String(value).replace(/\.0$/, "");
+      }
+
+      function metricCard(label, value, extraClass = "text-slate-100") {
+        return `
+          <article class="card rounded-xl p-4">
+            <p class="metric-label">${label}</p>
+            <p class="metric-value mt-3 ${extraClass}">${value}</p>
+          </article>
+        `;
+      }
+
+      function renderOverview(overview) {
+        const cards = [
+          metricCard("总资产", formatCurrency(overview.totalAssets)),
+          metricCard("当日盈亏", formatCurrency(overview.dailyPnL), pnlClass(overview.dailyPnL)),
+          metricCard("当日盈亏率", formatPercent(overview.dailyPnLRate), pnlClass(overview.dailyPnLRate)),
+          metricCard("持有盈亏", formatCurrency(overview.holdingPnL), pnlClass(overview.holdingPnL)),
+          metricCard("持有盈亏率", formatPercent(overview.holdingPnLRate), pnlClass(overview.holdingPnLRate)),
+          metricCard("仓位占比", formatPercent(overview.positionRatio), "text-cyan-300"),
+          metricCard("本周盈亏", formatCurrency(overview.weeklyPnL), pnlClass(overview.weeklyPnL)),
+          metricCard("本月盈亏", formatCurrency(overview.monthlyPnL), pnlClass(overview.monthlyPnL)),
+          metricCard("今年盈亏", formatCurrency(overview.yearlyPnL), pnlClass(overview.yearlyPnL)),
+          metricCard("当前持仓数", `${overview.activeCount} 只`),
+          metricCard("已清仓记录", `${overview.closedCount} 条`),
+          metricCard("最大持仓", `${overview.topHoldingName || "--"} ${formatPercent(overview.topHoldingWeight)}`)
+        ];
+        document.getElementById("overviewCards").innerHTML = cards.join("");
+      }
+
+      function renderSummaryPanel(summary) {
+        const entries = [
+          ["持有金额", formatCurrency(summary["持有金额"])],
+          ["当日盈亏", `<span class="${pnlClass(summary["当日盈亏"])}">${formatCurrency(summary["当日盈亏"])}</span>`],
+          ["当日盈亏率", `<span class="${pnlClass(summary["当日盈亏率"])}">${formatPercent(summary["当日盈亏率"])}</span>`],
+          ["持有盈亏", `<span class="${pnlClass(summary["持有盈亏"])}">${formatCurrency(summary["持有盈亏"])}</span>`],
+          ["持有盈亏率", `<span class="${pnlClass(summary["持有盈亏率"])}">${formatPercent(summary["持有盈亏率"])}</span>`],
+          ["本周盈亏", `<span class="${pnlClass(summary["本周盈亏"])}">${formatCurrency(summary["本周盈亏"])}</span>`],
+          ["本月盈亏", `<span class="${pnlClass(summary["本月盈亏"])}">${formatCurrency(summary["本月盈亏"])}</span>`],
+          ["今年盈亏", `<span class="${pnlClass(summary["今年盈亏"])}">${formatCurrency(summary["今年盈亏"])}</span>`],
+          ["仓位占比", formatPercent(summary["仓位占比"]) ]
+        ];
+
+        document.getElementById("summaryPanel").innerHTML = entries
+          .map(
+            ([label, value]) => `
+              <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span class="text-slate-400">${label}</span>
+                <span class="text-right">${value}</span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderHoldings(holdings) {
+        document.getElementById("holdingsHint").textContent = `共 ${holdings.length} 条当前持仓`;
+        document.getElementById("holdingsTableBody").innerHTML = holdings
+          .map(
+            (item) => `
+              <tr class="table-row border-b border-slate-800/70">
+                <td class="py-3 pr-4">${codeText(item["代码"])}</td>
+                <td class="py-3 pr-4">${item["名称"] || "--"}</td>
+                <td class="py-3 pr-4 text-right">${formatCurrency(item["持有金额"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["当日盈亏"])}">${formatCurrency(item["当日盈亏"])}<div class="text-xs ${pnlClass(item["当日盈亏率"])}">${formatPercent(item["当日盈亏率"])}</div></td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["持有盈亏"])}">${formatCurrency(item["持有盈亏"])}<div class="text-xs ${pnlClass(item["持有盈亏率"])}">${formatPercent(item["持有盈亏率"])}</div></td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["累计盈亏"])}">${formatCurrency(item["累计盈亏"])}<div class="text-xs ${pnlClass(item["累计盈亏率"])}">${formatPercent(item["累计盈亏率"])}</div></td>
+                <td class="py-3 pr-4 text-right">${formatPercent(item["仓位占比"])}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["持有数量"], 0)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["持仓天数"], 0)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["最新价"], 3)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["单位成本"], 3)}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(-toNumber(item["回本涨幅"]))}">${formatPercent(item["回本涨幅"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["近1月涨幅"])}">${formatPercent(item["近1月涨幅"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["近3月涨幅"])}">${formatPercent(item["近3月涨幅"])}</td>
+                <td class="py-3 text-right ${pnlClass(item["近1年涨幅"])}">${formatPercent(item["近1年涨幅"])}</td>
+              </tr>
+            `
+          )
+          .join("");
+      }
+
+      function renderClosed(closedPositions) {
+        document.getElementById("closedHint").textContent = `共 ${closedPositions.length} 条历史清仓`;
+        document.getElementById("closedTableBody").innerHTML = closedPositions
+          .slice()
+          .reverse()
+          .map(
+            (item) => `
+              <tr class="table-row border-b border-slate-800/70">
+                <td class="py-3 pr-4">${item["清仓日期"] || "--"}</td>
+                <td class="py-3 pr-4">${codeText(item["代码"])}</td>
+                <td class="py-3 pr-4">${item["名称"] || "--"}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["总盈亏"])}">${formatCurrency(item["总盈亏"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["盈亏比"])}">${formatPercent(item["盈亏比"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["同期大盘"])}">${formatPercent(item["同期大盘"])}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["跑赢大盘"])}">${formatPercent(item["跑赢大盘"])}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["买入均价"], 2)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["卖出均价"], 2)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["持仓天数"], 0)}</td>
+                <td class="py-3 pr-4 text-right">${formatCurrency(item["交易费用"])}</td>
+                <td class="py-3 text-right">${item["建仓日期"] || "--"}</td>
+              </tr>
+            `
+          )
+          .join("");
+      }
+
+      function renderTransactions(transactions) {
+        document.getElementById("tradeHint").textContent = `展示最近 ${transactions.length} 条记录`;
+        document.getElementById("transactionsTableBody").innerHTML = transactions
+          .map(
+            (item) => `
+              <tr class="table-row border-b border-slate-800/70">
+                <td class="py-3 pr-4">${item["成交日期"] || "--"}</td>
+                <td class="py-3 pr-4">${item["成交时间"] || "--"}</td>
+                <td class="py-3 pr-4">${codeText(item["代码"])}</td>
+                <td class="py-3 pr-4">${item["名称"] || "--"}</td>
+                <td class="py-3 pr-4">
+                  <span class="rounded-full border border-slate-700 px-2 py-0.5 text-xs text-slate-300">${item["交易类别"] || "--"}</span>
+                </td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["成交数量"], 0)}</td>
+                <td class="py-3 pr-4 text-right">${formatNumber(item["成交价格"], 3)}</td>
+                <td class="py-3 pr-4 text-right ${pnlClass(item["发生金额"])}">${formatCurrency(item["发生金额"])}</td>
+                <td class="py-3 pr-4 text-right">${formatCurrency(item["成交金额"])}</td>
+                <td class="py-3 pr-4 text-right">${formatCurrency(item["费用"])}</td>
+                <td class="py-3">${item["备注"] || "--"}</td>
+              </tr>
+            `
+          )
+          .join("");
+      }
+
+      function renderStrategy(strategy) {
+        document.getElementById("strategyInfo").innerHTML = `
+          <div>
+            <p class="font-medium text-slate-100">${strategy.title}</p>
+            <p class="mt-2 leading-6 text-slate-300">${strategy.positioning}</p>
+          </div>
+          <div>
+            <p class="mb-2 font-medium text-slate-100">说明</p>
+            <ul class="list-disc space-y-1 pl-5 text-slate-300">
+              ${strategy.riskRules.map((rule) => `<li>${rule}</li>`).join("")}
+            </ul>
+          </div>
+        `;
+      }
+
+      function renderNavChart(series) {
+        if (navChart) navChart.dispose();
+        navChart = echarts.init(document.getElementById("navChart"));
+        navChart.setOption({
+          backgroundColor: "transparent",
+          tooltip: { trigger: "axis" },
+          grid: { left: 46, right: 20, top: 24, bottom: 30 },
+          xAxis: {
+            type: "category",
+            data: series.map((item) => item.date),
+            axisLine: { lineStyle: { color: "#64748b" } },
+            axisLabel: { color: "#94a3b8" }
+          },
+          yAxis: {
+            type: "value",
+            axisLine: { lineStyle: { color: "#64748b" } },
+            splitLine: { lineStyle: { color: "rgba(148,163,184,0.15)" } },
+            axisLabel: { color: "#94a3b8" }
+          },
+          series: [
+            {
+              type: "line",
+              smooth: true,
+              symbol: "circle",
+              symbolSize: 6,
+              data: series.map((item) => item.nav),
+              lineStyle: { color: "#38bdf8", width: 2.5 },
+              itemStyle: { color: "#38bdf8" },
+              areaStyle: { color: "rgba(56,189,248,0.15)" }
+            }
+          ]
+        });
+      }
+
+      function renderAllocationChart(holdings) {
+        if (allocationChart) allocationChart.dispose();
+        allocationChart = echarts.init(document.getElementById("allocationChart"));
+        allocationChart.setOption({
+          backgroundColor: "transparent",
+          tooltip: { trigger: "item" },
+          legend: {
+            bottom: 0,
+            textStyle: { color: "#cbd5e1" }
+          },
+          color: ["#38bdf8", "#0ea5e9", "#0284c7", "#0369a1", "#155e75", "#1e3a8a", "#334155"],
+          series: [
+            {
+              type: "pie",
+              radius: ["44%", "72%"],
+              label: { color: "#cbd5e1", formatter: "{b}\n{d}%" },
+              itemStyle: {
+                borderColor: "#0f172a",
+                borderWidth: 2
+              },
+              data: holdings.map((item) => ({
+                name: item["名称"],
+                value: toNumber(item["仓位占比"]) * 100
+              }))
+            }
+          ]
+        });
+      }
+
+      function mountDashboard() {
+        const { meta, overview, navSeries, sheets, strategy } = dashboardData;
+        document.getElementById("portfolioTitle").textContent = meta.portfolioName;
+        const displayTime = meta.generatedAt || meta.asOfDate || "--";
+        document.getElementById("metaInfo").textContent = `数据时间：${displayTime} ｜ 数据源：${meta.sourceFile}`;
+        renderOverview(overview);
+        renderSummaryPanel(sheets.holdingSummary);
+        renderHoldings(sheets.currentHoldings);
+        renderClosed(sheets.closedPositions);
+        renderTransactions(sheets.transactions);
+        renderStrategy(strategy);
+        renderNavChart(navSeries);
+        renderAllocationChart(sheets.currentHoldings);
+
+        window.addEventListener("resize", () => {
+          if (navChart) navChart.resize();
+          if (allocationChart) allocationChart.resize();
+        });
+      }
+
+      async function loadData() {
+        const response = await fetch("./data.json");
+        if (!response.ok) throw new Error("data.json 加载失败");
+        return response.json();
+      }
+
+      async function init() {
+        try {
+          dashboardData = await loadData();
+          dataStatus.textContent = `当前展示：${dashboardData.meta?.sourceFile || "data.json"}`;
+        } catch (error) {
+          alert("页面初始化失败，请检查 data.json 是否存在且格式正确。");
+          return;
+        }
+
+        mountDashboard();
+      }
+
+      init();
+    </script>
+  </body>
+</html>
