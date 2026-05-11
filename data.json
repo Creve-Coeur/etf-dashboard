@@ -4,10 +4,15 @@
     "manager": "内部投研组",
     "asOfDate": "2026-05-11",
     "sourceFile": "latest.xlsx",
-    "generatedAt": "2026-05-11 15:51:19"
+    "generatedAt": "2026-05-11 16:29:21",
+    "navBaseDate": "2026-05-11",
+    "benchmarkName": "沪深300",
+    "benchmarkSymbol": "000300",
+    "benchmarkError": "沪深300数据获取失败：Length mismatch: Expected axis has 0 elements, new values have 16 elements"
   },
   "overview": {
-    "totalAssets": 29964.6,
+    "totalAssets": 29973.59,
+    "holdingMarketValue": 29964.6,
     "dailyPnL": -24.2,
     "dailyPnLRate": -0.0008,
     "holdingPnL": -27.19,
@@ -24,50 +29,11 @@
   },
   "navSeries": [
     {
-      "date": "2026-04-14",
+      "date": "2026-05-11",
       "nav": 1.0
-    },
-    {
-      "date": "2026-04-15",
-      "nav": 0.9988
-    },
-    {
-      "date": "2026-04-16",
-      "nav": 1.0012
-    },
-    {
-      "date": "2026-04-17",
-      "nav": 1.0031
-    },
-    {
-      "date": "2026-04-18",
-      "nav": 1.0047
-    },
-    {
-      "date": "2026-04-21",
-      "nav": 1.0068
-    },
-    {
-      "date": "2026-04-22",
-      "nav": 1.0055
-    },
-    {
-      "date": "2026-04-23",
-      "nav": 1.008
-    },
-    {
-      "date": "2026-04-24",
-      "nav": 1.0101
-    },
-    {
-      "date": "2026-04-25",
-      "nav": 1.0115
-    },
-    {
-      "date": "2026-04-28",
-      "nav": 1.0093
     }
   ],
+  "benchmarkSeries": [],
   "sheets": {
     "currentHoldings": [
       {
@@ -526,11 +492,11 @@
   },
   "strategy": {
     "title": "自动同步 Excel 展示",
-    "positioning": "页面数据由最新导出的 Excel 自动生成，无需再手工维护持仓、清仓和交易记录。当前净值曲线仍保留为独立字段，便于后续接入历史净值序列。",
+    "positioning": "页面数据由最新导出的 Excel 自动生成，无需再手工维护持仓、清仓和交易记录。净值曲线来自每日真实资产快照，并与沪深300同步基日对比。",
     "riskRules": [
       "每日运行下载脚本后，网页会同步刷新为最新账本数据。",
       "持仓明细、已清仓和交易记录全部来自 Excel 原始工作表。",
-      "若要继续增强净值曲线，可后续追加历史归档文件自动汇总逻辑。"
+      "组合净值以首次记录日为基日，后续每日更新同一份净值历史。"
     ]
   }
 }

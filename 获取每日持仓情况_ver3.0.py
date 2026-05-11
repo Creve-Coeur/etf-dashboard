@@ -20,6 +20,9 @@ TARGET_DIR = r"C:\Users\Coeur\Desktop\红筹投资\组合构建\new_etf_website\
 TARGET_URL = "https://tzzb.10jqka.com.cn/pc/index.html#/myAccount/a/eKkOoy2"
 LATEST_FILE_NAME = "latest.xlsx"
 DATA_JSON_NAME = "data.json"
+NAV_HISTORY_NAME = "nav_history.json"
+BENCHMARK_INDEX_SYMBOL = "000300"
+BENCHMARK_INDEX_NAME = "沪深300"
 
 # ===================================================
 
@@ -56,6 +59,112 @@ def clean_dict(record):
     """清洗单条字典记录，确保没有 NaN。"""
     return {key: clean_value(value) for key, value in record.items()}
 
+def safe_float(value, default=0.0):
+    """把 Excel 里的数字安全转成 float。"""
+    try:
+        if pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def normalize_date(value):
+    """统一日期格式为 YYYY-MM-DD。"""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d")
+    text = str(value or "").strip()
+    if not text:
+        return time.strftime("%Y-%m-%d")
+    try:
+        return pd.to_datetime(text).strftime("%Y-%m-%d")
+    except Exception:
+        return text[:10]
+
+def estimate_total_assets(holding_summary):
+    """用持仓市值和仓位占比估算账户总资产，避免遗漏现金仓位。"""
+    holding_market_value = safe_float(holding_summary.get("持有金额"))
+    position_ratio = safe_float(holding_summary.get("仓位占比"))
+    if position_ratio > 0:
+        return holding_market_value / position_ratio
+    return holding_market_value
+
+def load_json_file(path, fallback):
+    if not os.path.exists(path):
+        return fallback
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return fallback
+
+def update_nav_history(as_of_date, holding_summary):
+    """把当天真实资产快照写入净值历史，并返回归一化后的组合净值序列。"""
+    history_path = os.path.join(TARGET_DIR, NAV_HISTORY_NAME)
+    history = load_json_file(history_path, {"baseDate": as_of_date, "baseAssets": None, "series": []})
+
+    total_assets = estimate_total_assets(holding_summary)
+    holding_market_value = safe_float(holding_summary.get("持有金额"))
+    daily_pnl = safe_float(holding_summary.get("当日盈亏"))
+    position_ratio = safe_float(holding_summary.get("仓位占比"))
+
+    existing = {item.get("date"): item for item in history.get("series", []) if item.get("date")}
+    existing[as_of_date] = {
+        "date": as_of_date,
+        "totalAssets": round(total_assets, 2),
+        "holdingMarketValue": round(holding_market_value, 2),
+        "dailyPnL": round(daily_pnl, 2),
+        "positionRatio": round(position_ratio, 6)
+    }
+
+    series = sorted(existing.values(), key=lambda item: item["date"])
+    if not history.get("baseAssets"):
+        history["baseDate"] = series[0]["date"] if series else as_of_date
+        history["baseAssets"] = series[0]["totalAssets"] if series else total_assets
+
+    base_assets = safe_float(history.get("baseAssets"))
+    for item in series:
+        item["nav"] = round(item["totalAssets"] / base_assets, 6) if base_assets else 1.0
+
+    history["series"] = series
+    with open(history_path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2, default=str)
+
+    return [{"date": item["date"], "nav": item["nav"]} for item in series], history
+
+def fetch_benchmark_series(base_date, end_date):
+    """从中证指数接口获取沪深300收盘价，并按基日归一为净值。"""
+    try:
+        import akshare as ak
+    except ImportError:
+        return [], "本机未安装 akshare，暂时无法获取沪深300。"
+
+    try:
+        start = base_date.replace("-", "")
+        end = end_date.replace("-", "")
+        df = ak.stock_zh_index_hist_csindex(symbol=BENCHMARK_INDEX_SYMBOL, start_date=start, end_date=end)
+    except Exception as exc:
+        return [], f"沪深300数据获取失败：{exc}"
+
+    if df is None or df.empty or "收盘" not in df.columns:
+        return [], "沪深300接口未返回有效收盘价。"
+
+    df = df.copy()
+    df["日期"] = pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-%d")
+    df = df.sort_values("日期")
+    base_close = safe_float(df.iloc[0]["收盘"])
+    if not base_close:
+        return [], "沪深300基日收盘价无效。"
+
+    series = []
+    for _, row in df.iterrows():
+        close = safe_float(row["收盘"])
+        series.append({
+            "date": row["日期"],
+            "close": round(close, 4),
+            "nav": round(close / base_close, 6)
+        })
+    return series, None
+
 def build_dashboard_data_from_excel(excel_path):
     """把最新 Excel 转成网页直接消费的 data.json 结构。"""
     file_generated_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(excel_path)))
@@ -91,19 +200,26 @@ def build_dashboard_data_from_excel(excel_path):
     latest_trade_date = None
     if transactions:
         latest_trade_date = transactions[0].get("成交日期")
-        if hasattr(latest_trade_date, "strftime"):
-            latest_trade_date = latest_trade_date.strftime("%Y-%m-%d")
+    as_of_date = normalize_date(latest_trade_date or time.strftime("%Y-%m-%d"))
+    nav_series, nav_history = update_nav_history(as_of_date, holding_summary)
+    benchmark_series, benchmark_error = fetch_benchmark_series(nav_history["baseDate"], as_of_date)
+    total_assets = estimate_total_assets(holding_summary)
 
     data = {
         "meta": {
             "portfolioName": "ETF实盘持仓账本",
             "manager": "内部投研组",
-            "asOfDate": latest_trade_date or time.strftime("%Y-%m-%d"),
+            "asOfDate": as_of_date,
             "sourceFile": os.path.basename(excel_path),
-            "generatedAt": file_generated_at
+            "generatedAt": file_generated_at,
+            "navBaseDate": nav_history["baseDate"],
+            "benchmarkName": BENCHMARK_INDEX_NAME,
+            "benchmarkSymbol": BENCHMARK_INDEX_SYMBOL,
+            "benchmarkError": benchmark_error
         },
         "overview": {
-            "totalAssets": float(holding_summary.get("持有金额") or 0),
+            "totalAssets": round(total_assets, 2),
+            "holdingMarketValue": float(holding_summary.get("持有金额") or 0),
             "dailyPnL": float(holding_summary.get("当日盈亏") or 0),
             "dailyPnLRate": float(holding_summary.get("当日盈亏率") or 0),
             "holdingPnL": float(holding_summary.get("持有盈亏") or 0),
@@ -118,19 +234,8 @@ def build_dashboard_data_from_excel(excel_path):
             "topHoldingName": top_holding.get("名称") if top_holding else "--",
             "topHoldingWeight": float(top_holding.get("仓位占比") or 0) if top_holding else 0
         },
-        "navSeries": [
-            {"date": "2026-04-14", "nav": 1.0},
-            {"date": "2026-04-15", "nav": 0.9988},
-            {"date": "2026-04-16", "nav": 1.0012},
-            {"date": "2026-04-17", "nav": 1.0031},
-            {"date": "2026-04-18", "nav": 1.0047},
-            {"date": "2026-04-21", "nav": 1.0068},
-            {"date": "2026-04-22", "nav": 1.0055},
-            {"date": "2026-04-23", "nav": 1.008},
-            {"date": "2026-04-24", "nav": 1.0101},
-            {"date": "2026-04-25", "nav": 1.0115},
-            {"date": "2026-04-28", "nav": 1.0093}
-        ],
+        "navSeries": nav_series,
+        "benchmarkSeries": benchmark_series,
         "sheets": {
             "currentHoldings": current_holdings,
             "holdingSummary": holding_summary,
@@ -139,11 +244,11 @@ def build_dashboard_data_from_excel(excel_path):
         },
         "strategy": {
             "title": "自动同步 Excel 展示",
-            "positioning": "页面数据由最新导出的 Excel 自动生成，无需再手工维护持仓、清仓和交易记录。当前净值曲线仍保留为独立字段，便于后续接入历史净值序列。",
+            "positioning": "页面数据由最新导出的 Excel 自动生成，无需再手工维护持仓、清仓和交易记录。净值曲线来自每日真实资产快照，并与沪深300同步基日对比。",
             "riskRules": [
                 "每日运行下载脚本后，网页会同步刷新为最新账本数据。",
                 "持仓明细、已清仓和交易记录全部来自 Excel 原始工作表。",
-                "若要继续增强净值曲线，可后续追加历史归档文件自动汇总逻辑。"
+                "组合净值以首次记录日为基日，后续每日更新同一份净值历史。"
             ]
         }
     }

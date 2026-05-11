@@ -52,8 +52,8 @@
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div class="card rounded-xl p-4 xl:col-span-2">
             <div class="mb-3 flex items-center justify-between">
-              <h2 class="text-sm font-medium text-slate-300">组合净值累计曲线</h2>
-              <span class="text-xs text-slate-500">独立维护于 `data.json`</span>
+              <h2 class="text-sm font-medium text-slate-300">组合净值 vs 沪深300</h2>
+              <span id="navChartHint" class="text-xs text-slate-500">真实资产快照归一化</span>
             </div>
             <div id="navChart" class="h-80"></div>
           </div>
@@ -362,16 +362,29 @@
         `;
       }
 
-      function renderNavChart(series) {
+      function renderNavChart(series, benchmarkSeries = []) {
         if (navChart) navChart.dispose();
         navChart = echarts.init(document.getElementById("navChart"));
+        const dates = Array.from(new Set([
+          ...series.map((item) => item.date),
+          ...benchmarkSeries.map((item) => item.date)
+        ])).sort();
+        const valueByDate = (items) => {
+          const map = new Map(items.map((item) => [item.date, item.nav]));
+          return dates.map((date) => (map.has(date) ? map.get(date) : null));
+        };
         navChart.setOption({
           backgroundColor: "transparent",
           tooltip: { trigger: "axis" },
-          grid: { left: 46, right: 20, top: 24, bottom: 30 },
+          legend: {
+            top: 0,
+            right: 0,
+            textStyle: { color: "#cbd5e1" }
+          },
+          grid: { left: 46, right: 20, top: 36, bottom: 30 },
           xAxis: {
             type: "category",
-            data: series.map((item) => item.date),
+            data: dates,
             axisLine: { lineStyle: { color: "#64748b" } },
             axisLabel: { color: "#94a3b8" }
           },
@@ -383,14 +396,25 @@
           },
           series: [
             {
+              name: "组合净值",
               type: "line",
               smooth: true,
               symbol: "circle",
               symbolSize: 6,
-              data: series.map((item) => item.nav),
+              data: valueByDate(series),
               lineStyle: { color: "#38bdf8", width: 2.5 },
               itemStyle: { color: "#38bdf8" },
               areaStyle: { color: "rgba(56,189,248,0.15)" }
+            },
+            {
+              name: "沪深300",
+              type: "line",
+              smooth: true,
+              symbol: "circle",
+              symbolSize: 5,
+              data: valueByDate(benchmarkSeries),
+              lineStyle: { color: "#f59e0b", width: 2, type: "dashed" },
+              itemStyle: { color: "#f59e0b" }
             }
           ]
         });
@@ -426,17 +450,20 @@
       }
 
       function mountDashboard() {
-        const { meta, overview, navSeries, sheets, strategy } = dashboardData;
+        const { meta, overview, navSeries, benchmarkSeries, sheets, strategy } = dashboardData;
         document.getElementById("portfolioTitle").textContent = meta.portfolioName;
         const displayTime = meta.generatedAt || meta.asOfDate || "--";
         document.getElementById("metaInfo").textContent = `数据时间：${displayTime} ｜ 数据源：${meta.sourceFile}`;
+        document.getElementById("navChartHint").textContent = meta.benchmarkError
+          ? `基日：${meta.navBaseDate || "--"} ｜ ${meta.benchmarkError}`
+          : `基日：${meta.navBaseDate || "--"} ｜ 对比：${meta.benchmarkName || "沪深300"}`;
         renderOverview(overview);
         renderSummaryPanel(sheets.holdingSummary);
         renderHoldings(sheets.currentHoldings);
         renderClosed(sheets.closedPositions);
         renderTransactions(sheets.transactions);
         renderStrategy(strategy);
-        renderNavChart(navSeries);
+        renderNavChart(navSeries, benchmarkSeries || []);
         renderAllocationChart(sheets.currentHoldings);
 
         window.addEventListener("resize", () => {
