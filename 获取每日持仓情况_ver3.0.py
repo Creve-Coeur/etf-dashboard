@@ -223,8 +223,8 @@ def run_hybrid_crawler():
             # ================= 4. 自动部署到 GitHub =================
             print("\n☁️ [第四步] 正在将最新数据一键同步到 GitHub 云端...")
             
-            # 自动化 Git 命令：打包 -> 贴标签 -> 推送
-            deploy_command = 'git add . && git commit -m "Auto-update daily portfolio data" && git push'
+            # 🌟 修改后的新代码（加上了 -u origin main）
+            deploy_command = 'git add . && git commit -m "Auto-update daily portfolio data" && git push -u origin main'
             
             result = subprocess.run(
                 deploy_command, 
