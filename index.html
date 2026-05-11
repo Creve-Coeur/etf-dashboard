@@ -51,9 +51,15 @@
 
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div class="card rounded-xl p-4 xl:col-span-2">
-            <div class="mb-3 flex items-center justify-between">
-              <h2 class="text-sm font-medium text-slate-300">组合净值 vs 沪深300</h2>
-              <span id="navChartHint" class="text-xs text-slate-500">真实资产快照归一化</span>
+            <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-sm font-medium text-slate-300">组合净值对比</h2>
+                <span id="navChartHint" class="text-xs text-slate-500">真实资产快照归一化</span>
+              </div>
+              <select
+                id="benchmarkSelect"
+                class="rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-400"
+              ></select>
             </div>
             <div id="navChart" class="h-80"></div>
           </div>
@@ -362,7 +368,41 @@
         `;
       }
 
-      function renderNavChart(series, benchmarkSeries = []) {
+      function getBenchmarkMap() {
+        if (dashboardData?.benchmarkSeriesMap) return dashboardData.benchmarkSeriesMap;
+        if (dashboardData?.benchmarkSeries) {
+          return { [dashboardData.meta?.benchmarkName || "沪深300"]: dashboardData.benchmarkSeries };
+        }
+        return {};
+      }
+
+      function renderBenchmarkSelector(selectedName) {
+        const select = document.getElementById("benchmarkSelect");
+        const benchmarkMap = getBenchmarkMap();
+        const names = Object.keys(benchmarkMap);
+        select.innerHTML = names.map((name) => `<option value="${name}">${name}</option>`).join("");
+        select.value = names.includes(selectedName) ? selectedName : names[0] || "";
+        select.disabled = names.length === 0;
+        select.onchange = () => {
+          const nextName = select.value;
+          renderNavChart(dashboardData.navSeries, benchmarkMap[nextName] || [], nextName);
+          updateNavChartHint(nextName);
+        };
+      }
+
+      function updateNavChartHint(selectedName) {
+        const errors = dashboardData.meta?.benchmarkErrors || {};
+        const hasSelectedData = Boolean(getBenchmarkMap()[selectedName]?.length);
+        if (hasSelectedData) {
+          document.getElementById("navChartHint").textContent = `基日：${dashboardData.meta?.navBaseDate || "--"} ｜ 对比：${selectedName}`;
+          return;
+        }
+        document.getElementById("navChartHint").textContent = errors[selectedName]
+          ? `基日：${dashboardData.meta?.navBaseDate || "--"} ｜ ${errors[selectedName]}`
+          : `基日：${dashboardData.meta?.navBaseDate || "--"} ｜ 暂无可用对比指数`;
+      }
+
+      function renderNavChart(series, benchmarkSeries = [], benchmarkName = "对比指数") {
         if (navChart) navChart.dispose();
         navChart = echarts.init(document.getElementById("navChart"));
         const dates = Array.from(new Set([
@@ -407,7 +447,7 @@
               areaStyle: { color: "rgba(56,189,248,0.15)" }
             },
             {
-              name: "沪深300",
+              name: benchmarkName,
               type: "line",
               smooth: true,
               symbol: "circle",
@@ -450,20 +490,21 @@
       }
 
       function mountDashboard() {
-        const { meta, overview, navSeries, benchmarkSeries, sheets, strategy } = dashboardData;
+        const { meta, overview, navSeries, sheets, strategy } = dashboardData;
         document.getElementById("portfolioTitle").textContent = meta.portfolioName;
         const displayTime = meta.generatedAt || meta.asOfDate || "--";
         document.getElementById("metaInfo").textContent = `数据时间：${displayTime} ｜ 数据源：${meta.sourceFile}`;
-        document.getElementById("navChartHint").textContent = meta.benchmarkError
-          ? `基日：${meta.navBaseDate || "--"} ｜ ${meta.benchmarkError}`
-          : `基日：${meta.navBaseDate || "--"} ｜ 对比：${meta.benchmarkName || "沪深300"}`;
+        const benchmarkMap = getBenchmarkMap();
+        const defaultBenchmark = benchmarkMap[meta.benchmarkName] ? meta.benchmarkName : Object.keys(benchmarkMap)[0];
+        renderBenchmarkSelector(defaultBenchmark);
+        updateNavChartHint(defaultBenchmark);
         renderOverview(overview);
         renderSummaryPanel(sheets.holdingSummary);
         renderHoldings(sheets.currentHoldings);
         renderClosed(sheets.closedPositions);
         renderTransactions(sheets.transactions);
         renderStrategy(strategy);
-        renderNavChart(navSeries, benchmarkSeries || []);
+        renderNavChart(navSeries, benchmarkMap[defaultBenchmark] || [], defaultBenchmark || "对比指数");
         renderAllocationChart(sheets.currentHoldings);
 
         window.addEventListener("resize", () => {
