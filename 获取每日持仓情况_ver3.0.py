@@ -4,8 +4,9 @@ import glob
 import shutil
 import re
 import json
+import subprocess  # 🌟 必须导入这个库，才能让 Python 执行 Git 命令
 import pandas as pd
-import mimetypes # 用于识别文件类型给网页加速
+import mimetypes 
 
 # ================= 1. 核心路径配置 =================
 
@@ -13,7 +14,7 @@ import mimetypes # 用于识别文件类型给网页加速
 DOWNLOAD_DIR = r"C:\Users\Coeur\Downloads"
 
 # 你的量化实盘项目文件夹 (最终要把文件移到这里)
-TARGET_DIR = r"C:\Users\Coeur\Desktop\红筹投资\组合构建\网址\etf-portfolio-dashboard"
+TARGET_DIR = r"C:\Users\Coeur\Desktop\红筹投资\组合构建\new_etf_website\etf-portfolio-dashboard"
 
 # 同花顺投资账本网址
 TARGET_URL = "https://tzzb.10jqka.com.cn/pc/index.html#/myAccount/a/eKkOoy2"
@@ -219,7 +220,6 @@ def run_hybrid_crawler():
 
             print(f"🎉 文件处理结束！今日账单已入库：\n📁 {final_target_path}")
             
-         
             # ================= 4. 自动部署到 GitHub =================
             print("\n☁️ [第四步] 正在将最新数据一键同步到 GitHub 云端...")
             
@@ -243,6 +243,14 @@ def run_hybrid_crawler():
             else:
                 print("\n❌ 云端部署失败，请检查报错信息：")
                 print(result.stderr or result.stdout)
+                
+        # 🌟 捕获异常，防止报错崩溃
+        except PermissionError:
+            print(f"❌ 移动失败，文件可能被其他程序占用: {found_file}")
+        except Exception as e:
+            print(f"❌ 部署过程中发生未知错误: {e}")
+            
+    # 🌟 这里的 else 对应 if found_file:
     else:
         print("\n❌ 任务超时 (20秒)！未能在下载文件夹中检测到新产生的数据文件。")
 
