@@ -4,8 +4,8 @@ ETF 实盘持仓看板更新脚本
 
 使用方式：
 1. 在 Spyder 里按 #%% 分段运行。
-2. 直接运行整份脚本会自动执行完整流程。
-3. 也可以在 Spyder 里按 #%% 分段手动运行，查看变量浏览器。
+2. 每个执行步骤的 cell 里都是直接执行语句，运行该 cell 就会执行对应功能。
+3. 直接运行整份脚本会从上到下完成全部流程，并保留过程变量。
 """
 
 #%% 1. 导入库与基础配置
@@ -263,7 +263,7 @@ def check_benchmark_data(base_date=INDEX_HISTORY_START_DATE, end_date=None, inde
 
 
 #%% 5. Excel 转网页数据
-def build_dashboard_data_from_excel(excel_path):
+def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_errors=None):
     """把最新 Excel 转成网页直接消费的 data.json 结构。"""
     file_generated_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(excel_path)))
     site_refreshed_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -298,7 +298,8 @@ def build_dashboard_data_from_excel(excel_path):
     latest_trade_date = transactions[0].get("成交日期") if transactions else None
     as_of_date = normalize_date(latest_trade_date or time.strftime("%Y-%m-%d"))
     nav_series, nav_history = update_nav_history(as_of_date, holding_summary)
-    benchmark_map, benchmark_errors = fetch_all_benchmark_series(nav_history["baseDate"], as_of_date)
+    if benchmark_map is None or benchmark_errors is None:
+        benchmark_map, benchmark_errors = fetch_all_benchmark_series(nav_history["baseDate"], as_of_date)
     total_assets = estimate_total_assets(holding_summary)
 
     dashboard_data = {
@@ -354,12 +355,12 @@ def build_dashboard_data_from_excel(excel_path):
     return dashboard_data
 
 
-def refresh_data_json_from_excel(excel_path=None):
+def refresh_data_json_from_excel(excel_path=None, benchmark_map=None, benchmark_errors=None):
     """根据最新 Excel 刷新网页数据文件。返回 dashboard_data 方便变量浏览器查看。"""
     if excel_path is None:
         excel_path = os.path.join(TARGET_DIR, LATEST_FILE_NAME)
     target_json_path = os.path.join(TARGET_DIR, DATA_JSON_NAME)
-    dashboard_data = build_dashboard_data_from_excel(excel_path)
+    dashboard_data = build_dashboard_data_from_excel(excel_path, benchmark_map=benchmark_map, benchmark_errors=benchmark_errors)
 
     with open(target_json_path, "w", encoding="utf-8") as f:
         json.dump(dashboard_data, f, ensure_ascii=False, indent=2, default=str)
@@ -486,39 +487,47 @@ def run_full_workflow(max_wait_time=20, deploy=True):
     }
 
 
-#%% 9. 分步骤运行区：按需取消注释后运行
+#%% 9. 分步骤执行区：运行到哪个 cell，就直接执行哪个步骤
 # 说明：
-# - 直接运行整份脚本会执行最下面的 __main__ 完整流程。
-# - 想分步骤排查时，可以选中下面某一行或某个 cell 手动运行。
-# - 手动运行产生的变量会出现在 Spyder 变量浏览器。
+# - 不需要取消注释，也不需要设置触发开关。
+# - 在 Spyder 里单独运行某个 cell，就会执行该 cell 的功能。
+# - 直接运行整份脚本，会按下面顺序完整执行。
+# - 下面产生的 benchmark_map、start_time、found_file、excel_path、dashboard_data、deploy_result 都会出现在变量浏览器。
 
-# 只检查全部指数：
-# benchmark_map, benchmark_errors = check_benchmark_data()
-
-# 只检查某个指数：
-# benchmark_map, benchmark_errors = check_benchmark_data(index_name="沪深300")
-# benchmark_map, benchmark_errors = check_benchmark_data(index_name="创业板")
-
-# 只根据 latest.xlsx 刷新网页数据：
-# excel_path = os.path.join(TARGET_DIR, LATEST_FILE_NAME)
-# dashboard_data = refresh_data_json_from_excel(excel_path)
-
-# 只打开券商网站并记录开始时间：
-# start_time = open_broker_website()
-
-# 等待并捕获新下载文件：
-# found_file = wait_for_new_export(start_time, max_wait_time=20)
-
-# 移动下载文件并刷新 latest.xlsx：
-# excel_path = move_export_to_project(found_file)
-
-# 只执行云端部署：
-# deploy_result = deploy_to_cloud()
-
-# 一键完整流程，手动调用：
-# workflow_result = run_full_workflow(max_wait_time=20, deploy=True)
+#%% 9.1 获取并检查全部指数
+benchmark_map, benchmark_errors = check_benchmark_data()
 
 
-#%% 10. 直接运行整份脚本时执行完整流程
-if __name__ == "__main__":
-    workflow_result = run_full_workflow(max_wait_time=20, deploy=True)
+#%% 9.2 打开券商网站并记录开始时间
+start_time = open_broker_website()
+
+
+#%% 9.3 等待并捕获新下载文件
+WAIT_MAX_SECONDS = 20
+found_file = wait_for_new_export(start_time, max_wait_time=WAIT_MAX_SECONDS)
+
+
+#%% 9.4 移动下载文件并刷新 latest.xlsx
+if found_file is None:
+    raise RuntimeError("未检测到新下载的账本文件，请检查券商网站是否已成功导出。")
+excel_path = move_export_to_project(found_file)
+
+
+#%% 9.5 根据 latest.xlsx 刷新网页数据
+dashboard_data = refresh_data_json_from_excel(excel_path, benchmark_map=benchmark_map, benchmark_errors=benchmark_errors)
+
+
+#%% 9.6 执行云端部署
+deploy_result = deploy_to_cloud()
+
+
+#%% 9.7 汇总本次执行结果
+workflow_result = {
+    "benchmark_map": benchmark_map,
+    "benchmark_errors": benchmark_errors,
+    "start_time": start_time,
+    "found_file": found_file,
+    "excel_path": excel_path,
+    "dashboard_data": dashboard_data,
+    "deploy_result": deploy_result,
+}

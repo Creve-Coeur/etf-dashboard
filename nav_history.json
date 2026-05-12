@@ -4,9 +4,9 @@
   "series": [
     {
       "date": "2026-05-11",
-      "totalAssets": 29973.59,
-      "holdingMarketValue": 29964.6,
-      "dailyPnL": -24.2,
+      "totalAssets": 29920.98,
+      "holdingMarketValue": 29912.0,
+      "dailyPnL": -52.6,
       "positionRatio": 0.9997,
       "nav": 1.0
     }
