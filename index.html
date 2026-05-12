@@ -492,9 +492,10 @@
       function mountDashboard() {
         const { meta, overview, navSeries, sheets, strategy } = dashboardData;
         document.getElementById("portfolioTitle").textContent = meta.portfolioName;
-        const displayTime = meta.generatedAt || meta.asOfDate || "--";
+        const displayTime = meta.snapshotDate || meta.asOfDate || meta.generatedAt || "--";
+        const tradeDate = meta.tradeDate || "--";
         const siteRefreshedAt = meta.siteRefreshedAt || "--";
-        document.getElementById("metaInfo").textContent = `账本时间：${displayTime} ｜ 网站刷新：${siteRefreshedAt} ｜ 数据源：${meta.sourceFile}`;
+        document.getElementById("metaInfo").textContent = `账本日期：${displayTime} ｜ 交易日期：${tradeDate} ｜ 网站刷新：${siteRefreshedAt} ｜ 数据源：${meta.sourceFile}`;
         const benchmarkMap = getBenchmarkMap();
         const defaultBenchmark = benchmarkMap[meta.benchmarkName] ? meta.benchmarkName : Object.keys(benchmarkMap)[0];
         renderBenchmarkSelector(defaultBenchmark);

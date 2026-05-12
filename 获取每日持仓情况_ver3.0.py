@@ -109,6 +109,24 @@ def load_json_file(path, fallback):
         return fallback
 
 
+def get_excel_snapshot_date(excel_path):
+    """优先从文件名里的 YYYYMMDD 识别账本日期，识别不到则使用文件修改日期。"""
+    file_name = os.path.basename(excel_path)
+    match = re.search(r"(20\d{6})", file_name)
+    if match:
+        return pd.to_datetime(match.group(1), format="%Y%m%d").strftime("%Y-%m-%d")
+    return time.strftime("%Y-%m-%d", time.localtime(os.path.getmtime(excel_path)))
+
+
+def get_latest_project_excel():
+    """获取项目目录中最新的日期账本文件，排除 latest.xlsx 镜像文件。"""
+    pattern = os.path.join(TARGET_DIR, "20*.xlsx")
+    files = [path for path in glob.glob(pattern) if os.path.basename(path) != LATEST_FILE_NAME]
+    if not files:
+        return os.path.join(TARGET_DIR, LATEST_FILE_NAME)
+    return max(files, key=os.path.getmtime)
+
+
 #%% 3. 净值历史维护
 def estimate_total_assets(holding_summary):
     """由持仓市值和仓位占比估算总资产，包含现金仓位。"""
@@ -328,7 +346,9 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
         top_holding = current_holdings_df.sort_values("持有金额", ascending=False).iloc[0].to_dict()
 
     latest_trade_date = transactions[0].get("成交日期") if transactions else None
-    as_of_date = normalize_date(latest_trade_date or time.strftime("%Y-%m-%d"))
+    trade_date = normalize_date(latest_trade_date) if latest_trade_date else None
+    snapshot_date = get_excel_snapshot_date(excel_path)
+    as_of_date = max(date for date in [trade_date, snapshot_date] if date)
     nav_series, nav_history = update_nav_history(as_of_date, holding_summary)
     if benchmark_map is None or benchmark_errors is None:
         benchmark_map, benchmark_errors = fetch_all_benchmark_series(nav_history["baseDate"], as_of_date)
@@ -341,6 +361,8 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
             "portfolioName": "ETF实盘持仓账本",
             "manager": "内部投研组",
             "asOfDate": as_of_date,
+            "tradeDate": trade_date,
+            "snapshotDate": snapshot_date,
             "sourceFile": os.path.basename(excel_path),
             "generatedAt": file_generated_at,
             "siteRefreshedAt": site_refreshed_at,
@@ -392,7 +414,7 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
 def refresh_data_json_from_excel(excel_path=None, benchmark_map=None, benchmark_errors=None):
     """根据最新 Excel 刷新网页数据文件。返回 dashboard_data 方便变量浏览器查看。"""
     if excel_path is None:
-        excel_path = os.path.join(TARGET_DIR, LATEST_FILE_NAME)
+        excel_path = get_latest_project_excel()
     target_json_path = os.path.join(TARGET_DIR, DATA_JSON_NAME)
     dashboard_data = build_dashboard_data_from_excel(excel_path, benchmark_map=benchmark_map, benchmark_errors=benchmark_errors)
 
@@ -465,7 +487,7 @@ def move_export_to_project(found_file):
     if ext_part.lower() == ".xlsx":
         shutil.copy2(final_target_path, latest_target_path)
         print(f"latest.xlsx 已刷新: {latest_target_path}")
-        return latest_target_path
+        return final_target_path
     return final_target_path
 
 
