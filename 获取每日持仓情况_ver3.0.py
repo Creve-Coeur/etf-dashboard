@@ -436,28 +436,69 @@ def move_export_to_project(found_file):
 
 
 #%% 7. 云端部署
-def deploy_to_cloud():
-    """只执行云端部署。返回 result 方便变量浏览器检查 stdout/stderr。"""
-    command = 'git add . && git commit -m "Auto-update daily portfolio data" && git push -u origin main'
+def run_git_command(args):
+    """执行 Git 命令，返回 result 方便变量浏览器检查 stdout/stderr。"""
     result = subprocess.run(
-        command,
+        args,
         cwd=TARGET_DIR,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="ignore",
-        shell=True,
     )
-
+    print(f"\n$ {' '.join(args)}")
     print(result.stdout)
     if result.stderr:
         print(result.stderr)
+    return result
 
-    if result.returncode == 0 or "working tree clean" in result.stdout:
+
+def commit_local_changes():
+    """提交本地更新。没有新变化时也视为正常。"""
+    add_result = run_git_command(["git", "add", "."])
+    commit_result = run_git_command(["git", "commit", "-m", "Auto-update daily portfolio data"])
+
+    no_changes = "nothing to commit" in commit_result.stdout or "working tree clean" in commit_result.stdout
+    commit_ok = commit_result.returncode == 0 or no_changes
+    if commit_ok:
+        print("本地提交步骤完成。")
+    else:
+        print("本地提交失败，请检查 commit_result.stdout 和 commit_result.stderr。")
+
+    return {
+        "add_result": add_result,
+        "commit_result": commit_result,
+        "commit_ok": commit_ok,
+    }
+
+
+def push_to_cloud():
+    """只推送到云端。网络失败后可以单独重跑这个函数。"""
+    push_result = run_git_command(["git", "push", "-u", "origin", "main"])
+    if push_result.returncode == 0:
+        print("云端推送成功。")
+    else:
+        print("云端推送失败，请检查 push_result.stdout 和 push_result.stderr。")
+    return push_result
+
+def deploy_to_cloud():
+    """提交本地更新并推送云端。返回每一步结果，方便变量浏览器检查。"""
+    commit_info = commit_local_changes()
+    push_result = None
+    if commit_info["commit_ok"]:
+        push_result = push_to_cloud()
+
+    deploy_ok = commit_info["commit_ok"] and push_result is not None and push_result.returncode == 0
+    if deploy_ok:
         print("云端部署成功。")
     else:
-        print("云端部署失败，请检查 result.stdout 和 result.stderr。")
-    return result
+        print("云端部署未完成。若只是 GitHub 连接失败，网络恢复后单独运行：push_result = push_to_cloud()")
+
+    return {
+        "commit_info": commit_info,
+        "push_result": push_result,
+        "deploy_ok": deploy_ok,
+    }
 
 
 #%% 8. 可选：完整流程函数
