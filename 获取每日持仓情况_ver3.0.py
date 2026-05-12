@@ -28,6 +28,8 @@ TARGET_URL = "https://tzzb.10jqka.com.cn/pc/index.html#/myAccount/a/eKkOoy2"
 LATEST_FILE_NAME = "latest.xlsx"
 DATA_JSON_NAME = "data.json"
 NAV_HISTORY_NAME = "nav_history.json"
+GIT_REMOTE_NAME = "origin"
+GIT_REMOTE_SSH_URL = "git@github.com:Creve-Coeur/etf-dashboard.git"
 
 DEFAULT_BENCHMARK_NAME = "沪深300"
 INDEX_HISTORY_START_DATE = "20160101"
@@ -485,6 +487,23 @@ def run_git_command(args):
     return result
 
 
+def ensure_ssh_remote():
+    """确保 Git remote 使用 SSH 地址。"""
+    current_result = run_git_command(["git", "remote", "get-url", GIT_REMOTE_NAME])
+    current_url = current_result.stdout.strip()
+    if current_url == GIT_REMOTE_SSH_URL:
+        print(f"Git remote 已是 SSH: {GIT_REMOTE_SSH_URL}")
+        return current_result
+
+    print(f"正在将 Git remote 切换为 SSH: {GIT_REMOTE_SSH_URL}")
+    set_result = run_git_command(["git", "remote", "set-url", GIT_REMOTE_NAME, GIT_REMOTE_SSH_URL])
+    if set_result.returncode == 0:
+        print("Git remote 已切换为 SSH。")
+    else:
+        print("Git remote 切换失败，请检查 set_result.stdout 和 set_result.stderr。")
+    return set_result
+
+
 def commit_local_changes():
     """提交本地更新。没有新变化时也视为正常。"""
     add_result = run_git_command(["git", "add", "."])
@@ -504,9 +523,15 @@ def commit_local_changes():
     }
 
 
-def push_to_cloud():
+def push_to_cloud(ensure_remote=True):
     """只推送到云端。网络失败后可以单独重跑这个函数。"""
-    push_result = run_git_command(["git", "push", "-u", "origin", "main"])
+    if ensure_remote:
+        remote_result = ensure_ssh_remote()
+        if remote_result.returncode != 0:
+            print("未能确认 SSH remote，已停止推送。")
+            return remote_result
+
+    push_result = run_git_command(["git", "push", "-u", GIT_REMOTE_NAME, "main"])
     if push_result.returncode == 0:
         print("云端推送成功。")
     else:
@@ -515,18 +540,20 @@ def push_to_cloud():
 
 def deploy_to_cloud():
     """提交本地更新并推送云端。返回每一步结果，方便变量浏览器检查。"""
+    remote_result = ensure_ssh_remote()
     commit_info = commit_local_changes()
     push_result = None
-    if commit_info["commit_ok"]:
-        push_result = push_to_cloud()
+    if remote_result.returncode == 0 and commit_info["commit_ok"]:
+        push_result = push_to_cloud(ensure_remote=False)
 
-    deploy_ok = commit_info["commit_ok"] and push_result is not None and push_result.returncode == 0
+    deploy_ok = remote_result.returncode == 0 and commit_info["commit_ok"] and push_result is not None and push_result.returncode == 0
     if deploy_ok:
         print("云端部署成功。")
     else:
         print("云端部署未完成。若只是 GitHub 连接失败，网络恢复后单独运行：push_result = push_to_cloud()")
 
     return {
+        "remote_result": remote_result,
         "commit_info": commit_info,
         "push_result": push_result,
         "deploy_ok": deploy_ok,
