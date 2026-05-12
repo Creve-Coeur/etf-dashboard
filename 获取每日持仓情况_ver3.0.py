@@ -189,6 +189,36 @@ def index_df_to_nav_series(df):
     return series
 
 
+def trim_benchmark_map_to_base(benchmark_map, base_date, end_date):
+    """把指数序列裁剪到组合基日之后，并以裁剪后第一条收盘价重新归一化。"""
+    base_date = normalize_date(base_date)
+    end_date = normalize_date(end_date)
+    trimmed_map = {}
+
+    for name, series in (benchmark_map or {}).items():
+        filtered = [
+            item for item in series
+            if base_date <= normalize_date(item.get("date")) <= end_date and safe_float(item.get("close")) > 0
+        ]
+        if not filtered:
+            continue
+
+        base_close = safe_float(filtered[0].get("close"))
+        if not base_close:
+            continue
+
+        trimmed_map[name] = [
+            {
+                "date": normalize_date(item.get("date")),
+                "close": round(safe_float(item.get("close")), 4),
+                "nav": round(safe_float(item.get("close")) / base_close, 6),
+            }
+            for item in filtered
+        ]
+
+    return trimmed_map
+
+
 def fetch_all_benchmark_series(base_date, end_date):
     """获取全部可选基准指数，并按 base_date 之后第一个交易日归一化。"""
     try:
@@ -300,6 +330,8 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
     nav_series, nav_history = update_nav_history(as_of_date, holding_summary)
     if benchmark_map is None or benchmark_errors is None:
         benchmark_map, benchmark_errors = fetch_all_benchmark_series(nav_history["baseDate"], as_of_date)
+    else:
+        benchmark_map = trim_benchmark_map_to_base(benchmark_map, nav_history["baseDate"], as_of_date)
     total_assets = estimate_total_assets(holding_summary)
 
     dashboard_data = {
