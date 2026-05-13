@@ -30,6 +30,51 @@
         font-size: 1.35rem;
         font-weight: 600;
       }
+      .side-nav {
+        position: fixed;
+        right: 14px;
+        top: 50%;
+        z-index: 30;
+        transform: translateY(-50%);
+      }
+      .side-nav-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.76);
+        box-shadow: 0 18px 46px rgba(2, 6, 23, 0.34);
+        backdrop-filter: blur(12px);
+      }
+      .side-nav button {
+        border: 0;
+        color: #cbd5e1;
+      }
+      .side-nav-link {
+        display: flex;
+        width: 42px;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(30, 41, 59, 0.72);
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+      }
+      .side-nav-link:hover,
+      .side-nav-link.is-top:hover {
+        background: rgba(56, 189, 248, 0.26);
+        color: #f8fafc;
+        transform: translateX(-2px);
+      }
+      .side-nav-link.is-top {
+        background: rgba(14, 165, 233, 0.24);
+        font-size: 16px;
+      }
     </style>
   </head>
   <body class="min-h-screen text-slate-100 antialiased">
@@ -49,7 +94,7 @@
       <section class="mx-auto max-w-7xl space-y-6 p-4">
         <div id="overviewCards" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6"></div>
 
-        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div id="navSection" class="grid scroll-mt-24 grid-cols-1 gap-4 xl:grid-cols-3">
           <div class="card rounded-xl p-4 xl:col-span-2">
             <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -70,7 +115,7 @@
         </div>
 
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <div class="card rounded-xl p-4 xl:col-span-2">
+          <div id="holdingsSection" class="card scroll-mt-24 rounded-xl p-4 xl:col-span-2">
             <div class="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 class="text-sm font-medium text-slate-300">当前持仓明细</h2>
@@ -105,7 +150,7 @@
           </div>
 
           <div class="space-y-4">
-            <div class="card rounded-xl p-4">
+            <div id="summarySection" class="card scroll-mt-24 rounded-xl p-4">
               <h2 class="mb-3 text-sm font-medium text-slate-300">汇总快照</h2>
               <div id="summaryPanel" class="space-y-3 text-sm text-slate-300"></div>
             </div>
@@ -116,7 +161,7 @@
           </div>
         </div>
 
-        <div class="card rounded-xl p-4">
+        <div id="closedSection" class="card scroll-mt-24 rounded-xl p-4">
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 class="text-sm font-medium text-slate-300">已清仓记录</h2>
@@ -147,7 +192,7 @@
           </div>
         </div>
 
-        <div class="card rounded-xl p-4">
+        <div id="transactionsSection" class="card scroll-mt-24 rounded-xl p-4">
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 class="text-sm font-medium text-slate-300">最新交易记录</h2>
@@ -178,6 +223,16 @@
         </div>
       </section>
     </main>
+    <nav id="sideNav" class="side-nav" aria-label="页面导航">
+      <div class="side-nav-menu">
+        <button class="side-nav-link is-top" data-target="app" type="button" aria-label="返回顶部" title="返回顶部">↑</button>
+        <button class="side-nav-link" data-target="navSection" type="button" title="组合净值">净</button>
+        <button class="side-nav-link" data-target="holdingsSection" type="button" title="当前持仓">持</button>
+        <button class="side-nav-link" data-target="summarySection" type="button" title="汇总快照">汇</button>
+        <button class="side-nav-link" data-target="closedSection" type="button" title="已清仓记录">清</button>
+        <button class="side-nav-link" data-target="transactionsSection" type="button" title="最新交易记录">交</button>
+      </div>
+    </nav>
 
     <script>
       let dashboardData = null;
@@ -405,25 +460,39 @@
       function renderNavChart(series, benchmarkSeries = [], benchmarkName = "对比指数") {
         if (navChart) navChart.dispose();
         navChart = echarts.init(document.getElementById("navChart"));
+        const normalizeSeries = (items) => {
+          const first = items.find((item) => Number.isFinite(Number(item.nav)) && Number(item.nav) > 0);
+          const base = first ? Number(first.nav) : 1;
+          return items.map((item) => ({
+            ...item,
+            nav: Number.isFinite(Number(item.nav)) && base ? Number(item.nav) / base : null
+          }));
+        };
+        const normalizedPortfolioSeries = normalizeSeries(series);
+        const normalizedBenchmarkSeries = normalizeSeries(benchmarkSeries);
         const dates = Array.from(new Set([
-          ...series.map((item) => item.date),
-          ...benchmarkSeries.map((item) => item.date)
+          ...normalizedPortfolioSeries.map((item) => item.date),
+          ...normalizedBenchmarkSeries.map((item) => item.date)
         ])).sort();
         const valueByDate = (items) => {
           const map = new Map(items.map((item) => [item.date, item.nav]));
           return dates.map((date) => (map.has(date) ? map.get(date) : null));
         };
-        const portfolioValues = valueByDate(series);
-        const benchmarkValues = valueByDate(benchmarkSeries);
+        const portfolioValues = valueByDate(normalizedPortfolioSeries);
+        const benchmarkValues = valueByDate(normalizedBenchmarkSeries);
         const yValues = [...portfolioValues, ...benchmarkValues]
+          .filter((value) => value !== null && value !== undefined && value !== "")
           .map((value) => Number(value))
           .filter((value) => Number.isFinite(value));
         const rawMin = yValues.length ? Math.min(...yValues) : 0.98;
         const rawMax = yValues.length ? Math.max(...yValues) : 1.02;
         const rawRange = rawMax - rawMin;
-        const padding = Math.max(rawRange * 0.18, rawMax * 0.005, 0.005);
-        const yMin = Math.max(0, rawMin - padding);
-        const yMax = rawMax + padding;
+        const padding = Math.max(rawRange * 0.45, 0.0008);
+        const targetSplitCount = 5;
+        const yMin = Math.max(0, Math.min(rawMin, 1) - padding);
+        const yMax = Math.max(rawMax, 1) + padding;
+        const yInterval = (yMax - yMin) / targetSplitCount;
+        const axisDigits = yInterval < 0.01 ? 4 : 3;
         navChart.setOption({
           backgroundColor: "transparent",
           tooltip: { trigger: "axis" },
@@ -443,12 +512,13 @@
             type: "value",
             min: Number(yMin.toFixed(4)),
             max: Number(yMax.toFixed(4)),
+            interval: Number(yInterval.toFixed(4)),
             scale: true,
             axisLine: { lineStyle: { color: "#64748b" } },
             splitLine: { lineStyle: { color: "rgba(148,163,184,0.15)" } },
             axisLabel: {
               color: "#94a3b8",
-              formatter: (value) => Number(value).toFixed(3)
+              formatter: (value) => Number(value).toFixed(axisDigits)
             }
           },
           series: [
@@ -532,6 +602,16 @@
         });
       }
 
+      function setupSideNav() {
+        const sideNav = document.getElementById("sideNav");
+        document.querySelectorAll(".side-nav-link").forEach((button) => {
+          button.addEventListener("click", () => {
+            const target = document.getElementById(button.dataset.target);
+            if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        });
+      }
+
       async function loadData() {
         const response = await fetch("./data.json");
         if (!response.ok) throw new Error("data.json 加载失败");
@@ -548,6 +628,7 @@
         }
 
         mountDashboard();
+        setupSideNav();
       }
 
       init();
