@@ -1,6 +1,6 @@
 {
   "baseDate": "2026-05-11",
-  "baseAssets": 30000.0,
+  "baseAssets": 29921.38,
   "series": [
     {
       "date": "2026-05-11",
@@ -8,7 +8,7 @@
       "holdingMarketValue": 29912.4,
       "dailyPnL": -52.2,
       "positionRatio": 0.9997,
-      "nav": 0.997379
+      "nav": 1.0
     },
     {
       "date": "2026-05-12",
@@ -16,7 +16,7 @@
       "holdingMarketValue": 29918.2,
       "dailyPnL": -46.4,
       "positionRatio": 0.9997,
-      "nav": 0.997573
+      "nav": 1.000194
     },
     {
       "date": "2026-05-13",
@@ -24,7 +24,7 @@
       "holdingMarketValue": 29898.1,
       "dailyPnL": 129.0,
       "positionRatio": 0.9997,
-      "nav": 0.996902
+      "nav": 0.999522
     }
   ]
 }

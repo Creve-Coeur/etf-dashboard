@@ -30,7 +30,6 @@ DATA_JSON_NAME = "data.json"
 NAV_HISTORY_NAME = "nav_history.json"
 GIT_REMOTE_NAME = "origin"
 GIT_REMOTE_SSH_URL = "git@github.com:Creve-Coeur/etf-dashboard.git"
-INITIAL_TOTAL_ASSETS = 30000.0
 
 DEFAULT_BENCHMARK_NAME = "沪深300"
 INDEX_HISTORY_START_DATE = "20160101"
@@ -139,7 +138,7 @@ def estimate_total_assets(holding_summary):
 
 
 def update_nav_history(as_of_date, holding_summary):
-    """维护真实净值历史。净值=账户总资产/初始总资产。"""
+    """维护真实净值历史。建仓日净值为 1，之后按真实总资产相对建仓日总资产计算。"""
     history_path = os.path.join(TARGET_DIR, NAV_HISTORY_NAME)
     history = load_json_file(history_path, {"baseDate": as_of_date, "baseAssets": None, "series": []})
 
@@ -158,11 +157,12 @@ def update_nav_history(as_of_date, holding_summary):
     }
 
     series = sorted(existing.values(), key=lambda item: item["date"])
+    base_assets = safe_float(series[0]["totalAssets"]) if series else total_assets
     history["baseDate"] = series[0]["date"] if series else as_of_date
-    history["baseAssets"] = INITIAL_TOTAL_ASSETS
+    history["baseAssets"] = base_assets
 
     for item in series:
-        item["nav"] = round(safe_float(item.get("totalAssets")) / INITIAL_TOTAL_ASSETS, 6)
+        item["nav"] = round(safe_float(item.get("totalAssets")) / base_assets, 6) if base_assets else 1.0
 
     history["series"] = series
     with open(history_path, "w", encoding="utf-8") as f:
@@ -359,7 +359,7 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
             "generatedAt": file_generated_at,
             "siteRefreshedAt": site_refreshed_at,
             "navBaseDate": nav_history["baseDate"],
-            "navBaseAssets": INITIAL_TOTAL_ASSETS,
+            "navBaseAssets": nav_history["baseAssets"],
             "benchmarkName": DEFAULT_BENCHMARK_NAME,
             "benchmarkError": "; ".join(benchmark_errors.values()) if benchmark_errors else None,
             "benchmarkErrors": benchmark_errors,

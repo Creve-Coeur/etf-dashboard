@@ -6,15 +6,13 @@
     "tradeDate": "2026-05-11",
     "snapshotDate": "2026-05-13",
     "sourceFile": "20260513_银河.xlsx",
-    "generatedAt": "2026-05-13 17:33:06",
-    "siteRefreshedAt": "2026-05-13 17:33:06",
+    "generatedAt": "2026-05-13 17:43:23",
+    "siteRefreshedAt": "2026-05-13 17:43:24",
     "navBaseDate": "2026-05-11",
-    "navBaseAssets": 30000.0,
+    "navBaseAssets": 29921.38,
     "benchmarkName": "沪深300",
-    "benchmarkError": "国证2000 (399303) 国证接口获取失败：Expecting value: line 1 column 1 (char 0)",
-    "benchmarkErrors": {
-      "国证2000": "国证2000 (399303) 国证接口获取失败：Expecting value: line 1 column 1 (char 0)"
-    },
+    "benchmarkError": null,
+    "benchmarkErrors": {},
     "availableBenchmarks": [
       "沪深300",
       "上证50",
@@ -24,6 +22,7 @@
       "中证500",
       "中证红利",
       "中证全指",
+      "国证2000",
       "创业板"
     ]
   },
@@ -47,15 +46,15 @@
   "navSeries": [
     {
       "date": "2026-05-11",
-      "nav": 0.997379
+      "nav": 1.0
     },
     {
       "date": "2026-05-12",
-      "nav": 0.997573
+      "nav": 1.000194
     },
     {
       "date": "2026-05-13",
-      "nav": 0.996902
+      "nav": 0.999522
     }
   ],
   "benchmarkSeries": [
@@ -165,6 +164,18 @@
         "date": "2026-05-12",
         "close": 6605.72,
         "nav": 0.995815
+      }
+    ],
+    "国证2000": [
+      {
+        "date": "2026-05-11",
+        "close": 11693.0298,
+        "nav": 1.0
+      },
+      {
+        "date": "2026-05-12",
+        "close": 11623.907,
+        "nav": 0.994089
       }
     ],
     "创业板": [
