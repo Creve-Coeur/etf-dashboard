@@ -30,6 +30,7 @@ DATA_JSON_NAME = "data.json"
 NAV_HISTORY_NAME = "nav_history.json"
 GIT_REMOTE_NAME = "origin"
 GIT_REMOTE_SSH_URL = "git@github.com:Creve-Coeur/etf-dashboard.git"
+INITIAL_TOTAL_ASSETS = 30000.0
 
 DEFAULT_BENCHMARK_NAME = "沪深300"
 INDEX_HISTORY_START_DATE = "20160101"
@@ -138,7 +139,7 @@ def estimate_total_assets(holding_summary):
 
 
 def update_nav_history(as_of_date, holding_summary):
-    """维护真实净值历史。首日净值为 1，之后用每日盈亏滚动计算。"""
+    """维护真实净值历史。净值=账户总资产/初始总资产。"""
     history_path = os.path.join(TARGET_DIR, NAV_HISTORY_NAME)
     history = load_json_file(history_path, {"baseDate": as_of_date, "baseAssets": None, "series": []})
 
@@ -157,20 +158,11 @@ def update_nav_history(as_of_date, holding_summary):
     }
 
     series = sorted(existing.values(), key=lambda item: item["date"])
-    if not history.get("baseAssets"):
-        history["baseDate"] = series[0]["date"] if series else as_of_date
-        history["baseAssets"] = series[0]["totalAssets"] if series else total_assets
+    history["baseDate"] = series[0]["date"] if series else as_of_date
+    history["baseAssets"] = INITIAL_TOTAL_ASSETS
 
-    previous_nav = 1.0
-    previous_assets = safe_float(history.get("baseAssets"))
-    for index, item in enumerate(series):
-        if index == 0:
-            item["nav"] = 1.0
-        else:
-            daily_return = item["dailyPnL"] / previous_assets if previous_assets else 0
-            item["nav"] = round(previous_nav * (1 + daily_return), 6)
-        previous_nav = item["nav"]
-        previous_assets = safe_float(item.get("totalAssets"))
+    for item in series:
+        item["nav"] = round(safe_float(item.get("totalAssets")) / INITIAL_TOTAL_ASSETS, 6)
 
     history["series"] = series
     with open(history_path, "w", encoding="utf-8") as f:
@@ -367,6 +359,7 @@ def build_dashboard_data_from_excel(excel_path, benchmark_map=None, benchmark_er
             "generatedAt": file_generated_at,
             "siteRefreshedAt": site_refreshed_at,
             "navBaseDate": nav_history["baseDate"],
+            "navBaseAssets": INITIAL_TOTAL_ASSETS,
             "benchmarkName": DEFAULT_BENCHMARK_NAME,
             "benchmarkError": "; ".join(benchmark_errors.values()) if benchmark_errors else None,
             "benchmarkErrors": benchmark_errors,

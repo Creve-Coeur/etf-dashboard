@@ -35,7 +35,24 @@
         right: 14px;
         top: 50%;
         z-index: 30;
+        display: flex;
         transform: translateY(-50%);
+        flex-direction: column;
+        align-items: center;
+        gap: 7px;
+        user-select: none;
+        touch-action: none;
+      }
+      .side-nav.is-positioned {
+        right: auto;
+        transform: none;
+      }
+      .side-nav.collapsed .side-nav-menu {
+        display: none;
+      }
+      .side-nav.dragging .side-nav-toggle {
+        cursor: grabbing;
+        transform: scale(1.04);
       }
       .side-nav-menu {
         display: flex;
@@ -52,6 +69,22 @@
         border: 0;
         color: #cbd5e1;
       }
+      .side-nav-toggle {
+        display: flex;
+        width: 42px;
+        height: 42px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(14, 165, 233, 0.24);
+        box-shadow: 0 14px 34px rgba(2, 6, 23, 0.34);
+        font-size: 16px;
+        font-weight: 700;
+        transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+      }
+      .side-nav.collapsed .side-nav-toggle {
+        cursor: grab;
+      }
       .side-nav-link {
         display: flex;
         width: 42px;
@@ -66,7 +99,8 @@
         transition: background 160ms ease, color 160ms ease, transform 160ms ease;
       }
       .side-nav-link:hover,
-      .side-nav-link.is-top:hover {
+      .side-nav-link.is-top:hover,
+      .side-nav-toggle:hover {
         background: rgba(56, 189, 248, 0.26);
         color: #f8fafc;
         transform: translateX(-2px);
@@ -223,7 +257,7 @@
         </div>
       </section>
     </main>
-    <nav id="sideNav" class="side-nav" aria-label="页面导航">
+    <nav id="sideNav" class="side-nav collapsed" aria-label="页面导航">
       <div class="side-nav-menu">
         <button class="side-nav-link is-top" data-target="app" type="button" aria-label="返回顶部" title="返回顶部">↑</button>
         <button class="side-nav-link" data-target="navSection" type="button" title="组合净值">净</button>
@@ -232,6 +266,7 @@
         <button class="side-nav-link" data-target="closedSection" type="button" title="已清仓记录">清</button>
         <button class="side-nav-link" data-target="transactionsSection" type="button" title="最新交易记录">交</button>
       </div>
+      <button id="sideNavToggle" class="side-nav-toggle" type="button" aria-label="展开或折叠导航" title="折叠时可拖动">☰</button>
     </nav>
 
     <script>
@@ -460,7 +495,7 @@
       function renderNavChart(series, benchmarkSeries = [], benchmarkName = "对比指数") {
         if (navChart) navChart.dispose();
         navChart = echarts.init(document.getElementById("navChart"));
-        const normalizeSeries = (items) => {
+        const normalizeBenchmarkSeries = (items) => {
           const first = items.find((item) => Number.isFinite(Number(item.nav)) && Number(item.nav) > 0);
           const base = first ? Number(first.nav) : 1;
           return items.map((item) => ({
@@ -468,17 +503,20 @@
             nav: Number.isFinite(Number(item.nav)) && base ? Number(item.nav) / base : null
           }));
         };
-        const normalizedPortfolioSeries = normalizeSeries(series);
-        const normalizedBenchmarkSeries = normalizeSeries(benchmarkSeries);
+        const portfolioSeries = series.map((item) => ({
+          ...item,
+          nav: Number.isFinite(Number(item.nav)) ? Number(item.nav) : null
+        }));
+        const normalizedBenchmarkSeries = normalizeBenchmarkSeries(benchmarkSeries);
         const dates = Array.from(new Set([
-          ...normalizedPortfolioSeries.map((item) => item.date),
+          ...portfolioSeries.map((item) => item.date),
           ...normalizedBenchmarkSeries.map((item) => item.date)
         ])).sort();
         const valueByDate = (items) => {
           const map = new Map(items.map((item) => [item.date, item.nav]));
           return dates.map((date) => (map.has(date) ? map.get(date) : null));
         };
-        const portfolioValues = valueByDate(normalizedPortfolioSeries);
+        const portfolioValues = valueByDate(portfolioSeries);
         const benchmarkValues = valueByDate(normalizedBenchmarkSeries);
         const yValues = [...portfolioValues, ...benchmarkValues]
           .filter((value) => value !== null && value !== undefined && value !== "")
@@ -604,10 +642,67 @@
 
       function setupSideNav() {
         const sideNav = document.getElementById("sideNav");
+        const toggle = document.getElementById("sideNavToggle");
+        const savedPosition = localStorage.getItem("sideNavPosition");
+        let dragState = null;
+        if (savedPosition) {
+          try {
+            const position = JSON.parse(savedPosition);
+            if (Number.isFinite(position.left) && Number.isFinite(position.top)) {
+              sideNav.classList.add("is-positioned");
+              sideNav.style.left = `${position.left}px`;
+              sideNav.style.top = `${position.top}px`;
+            }
+          } catch (error) {
+            localStorage.removeItem("sideNavPosition");
+          }
+        }
+        const placeSideNav = (left, top) => {
+          const rect = sideNav.getBoundingClientRect();
+          const nextLeft = Math.min(Math.max(left, 8), window.innerWidth - rect.width - 8);
+          const nextTop = Math.min(Math.max(top, 8), window.innerHeight - rect.height - 8);
+          sideNav.classList.add("is-positioned");
+          sideNav.style.left = `${nextLeft}px`;
+          sideNav.style.top = `${nextTop}px`;
+          localStorage.setItem("sideNavPosition", JSON.stringify({ left: nextLeft, top: nextTop }));
+        };
+        toggle.addEventListener("pointerdown", (event) => {
+          const rect = sideNav.getBoundingClientRect();
+          dragState = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            left: rect.left,
+            top: rect.top,
+            moved: false
+          };
+          toggle.setPointerCapture(event.pointerId);
+        });
+        toggle.addEventListener("pointermove", (event) => {
+          if (!dragState || !sideNav.classList.contains("collapsed")) return;
+          const deltaX = event.clientX - dragState.startX;
+          const deltaY = event.clientY - dragState.startY;
+          if (Math.abs(deltaX) + Math.abs(deltaY) > 4) dragState.moved = true;
+          if (dragState.moved) {
+            sideNav.classList.add("dragging");
+            placeSideNav(dragState.left + deltaX, dragState.top + deltaY);
+          }
+        });
+        toggle.addEventListener("pointerup", (event) => {
+          if (!dragState) return;
+          const wasMoved = dragState.moved;
+          sideNav.classList.remove("dragging");
+          try {
+            toggle.releasePointerCapture(event.pointerId);
+          } catch (error) {}
+          dragState = null;
+          if (!wasMoved) sideNav.classList.toggle("collapsed");
+        });
         document.querySelectorAll(".side-nav-link").forEach((button) => {
           button.addEventListener("click", () => {
             const target = document.getElementById(button.dataset.target);
             if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+            sideNav.classList.add("collapsed");
           });
         });
       }
