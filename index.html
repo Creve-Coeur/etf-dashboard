@@ -413,6 +413,17 @@
           const map = new Map(items.map((item) => [item.date, item.nav]));
           return dates.map((date) => (map.has(date) ? map.get(date) : null));
         };
+        const portfolioValues = valueByDate(series);
+        const benchmarkValues = valueByDate(benchmarkSeries);
+        const yValues = [...portfolioValues, ...benchmarkValues]
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value));
+        const rawMin = yValues.length ? Math.min(...yValues) : 0.98;
+        const rawMax = yValues.length ? Math.max(...yValues) : 1.02;
+        const rawRange = rawMax - rawMin;
+        const padding = Math.max(rawRange * 0.18, rawMax * 0.005, 0.005);
+        const yMin = Math.max(0, rawMin - padding);
+        const yMax = rawMax + padding;
         navChart.setOption({
           backgroundColor: "transparent",
           tooltip: { trigger: "axis" },
@@ -430,9 +441,15 @@
           },
           yAxis: {
             type: "value",
+            min: Number(yMin.toFixed(4)),
+            max: Number(yMax.toFixed(4)),
+            scale: true,
             axisLine: { lineStyle: { color: "#64748b" } },
             splitLine: { lineStyle: { color: "rgba(148,163,184,0.15)" } },
-            axisLabel: { color: "#94a3b8" }
+            axisLabel: {
+              color: "#94a3b8",
+              formatter: (value) => Number(value).toFixed(3)
+            }
           },
           series: [
             {
@@ -441,7 +458,7 @@
               smooth: true,
               symbol: "circle",
               symbolSize: 6,
-              data: valueByDate(series),
+              data: portfolioValues,
               lineStyle: { color: "#38bdf8", width: 2.5 },
               itemStyle: { color: "#38bdf8" },
               areaStyle: { color: "rgba(56,189,248,0.15)" }
@@ -452,7 +469,7 @@
               smooth: true,
               symbol: "circle",
               symbolSize: 5,
-              data: valueByDate(benchmarkSeries),
+              data: benchmarkValues,
               lineStyle: { color: "#f59e0b", width: 2, type: "dashed" },
               itemStyle: { color: "#f59e0b" }
             }

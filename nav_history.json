@@ -17,6 +17,14 @@
       "dailyPnL": -46.4,
       "positionRatio": 0.9997,
       "nav": 0.998449
+    },
+    {
+      "date": "2026-05-13",
+      "totalAssets": 29790.14,
+      "holdingMarketValue": 29781.2,
+      "dailyPnL": 12.1,
+      "positionRatio": 0.9997,
+      "nav": 0.998853
     }
   ]
 }
